@@ -1,113 +1,196 @@
+'use client'
+import { Button } from "@/components/ui/button";
 import Image from "next/image";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { useForm } from "react-hook-form"
+import { z } from "zod"
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form"
+import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea";
+import { setCookie, getCookie, deleteCookie } from "cookies-next";
+import axios, { Axios, AxiosResponse } from "axios";
+import { useState } from "react";
+
 
 export default function Home() {
+  const [ response, setResponse ] = useState<AxiosResponse<any, any> | undefined>(undefined)
+
+  function onRequest(res: AxiosResponse<any, any>) {
+    console.log("--> "+JSON.stringify(res))
+    console.log("---> "+res.data)
+    if (res.data.accessToken && res.data.refreshToken) {
+      setCookie("ACCESS_TOKEN_USER", res.data.accessToken)
+      setCookie("REFRESH_TOKEN_USER", res.data.refreshToken)
+    } 
+    setResponse(res)
+  }
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-between p-24">
-      <div className="z-10 max-w-5xl w-full items-center justify-between font-mono text-sm lg:flex">
-        <p className="fixed left-0 top-0 flex w-full justify-center border-b border-gray-300 bg-gradient-to-b from-zinc-200 pb-6 pt-8 backdrop-blur-2xl dark:border-neutral-800 dark:bg-zinc-800/30 dark:from-inherit lg:static lg:w-auto  lg:rounded-xl lg:border lg:bg-gray-200 lg:p-4 lg:dark:bg-zinc-800/30">
-          Get started by editing&nbsp;
-          <code className="font-mono font-bold">src/app/page.tsx</code>
-        </p>
-        <div className="fixed bottom-0 left-0 flex h-48 w-full items-end justify-center bg-gradient-to-t from-white via-white dark:from-black dark:via-black lg:static lg:h-auto lg:w-auto lg:bg-none">
-          <a
-            className="pointer-events-none flex place-items-center gap-2 p-8 lg:pointer-events-auto lg:p-0"
-            href="https://vercel.com?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            By{" "}
-            <Image
-              src="/vercel.svg"
-              alt="Vercel Logo"
-              className="dark:invert"
-              width={100}
-              height={24}
-              priority
-            />
-          </a>
+    <div className="w-screen h-screen bg-blue-100">
+      <ResizablePanelGroup direction="horizontal">
+        <ResizablePanel>
+          <InputURLAndData onRequest={onRequest}/>
+        </ResizablePanel>
+        <ResizableHandle withHandle className="bg-slate-400" />
+        <ResizablePanel>
+          <ShowResponse response={response}/>
+        </ResizablePanel>
+      </ResizablePanelGroup>
+    </div>
+  );
+}
+
+
+function InputURLAndData({ onRequest }: { onRequest: (res: AxiosResponse<any, any>) => void }) {
+  const formSchema = z.object({
+    method: z.string().refine((val: string) => ["GET", "POST", "DELETE", "PATCH"].includes(val), {
+      message: "Invalid Method"
+    }),
+    requestUrl: z.string().refine((val: string) => val.startsWith('http://localhost:4000'), {
+      message: "The URL entered must starts with \"http://localhost:4000\""
+    }),
+    jsonReqBody: z.string().refine((val: string): boolean => {
+      try {
+        JSON.parse(val);
+        return true
+      }
+      catch (e) {
+        return false
+      }
+    })
+  })
+
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      method: "",
+      requestUrl: "",
+      jsonReqBody: "",
+    },
+  })
+
+  async function onSubmit(values: z.infer<typeof formSchema>) {
+    console.log(values)
+    const dataSent = JSON.parse(values.jsonReqBody)
+    const currentToken = getCookie("ACCESS_TOKEN_USER")
+    const requestConfiguration = {
+      method: values.method,
+      url: values.requestUrl,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${currentToken}`
+      },
+      data: dataSent
+    }
+    const res = await axios.request(requestConfiguration)
+
+    if (values.requestUrl === "http://localhost:4000/auth/logout") {
+      deleteCookie("ACCESS_TOKEN_USER")
+      deleteCookie("REFRESH_TOKEN_USER")
+    }
+
+    onRequest(res)
+  }
+
+  return (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col space-y-8 p-3 space-x-1 h-full">
+
+      <FormField
+          control={form.control}
+          name="method"
+          render={({ field }) => (
+            <FormItem >
+              <FormLabel>Method</FormLabel>
+              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Enter your Request Method" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent className="bg-green-100">
+                  <SelectItem value="GET">GET</SelectItem>
+                  <SelectItem value="POST">POST</SelectItem>
+                  <SelectItem value="DELETE">DELETE</SelectItem>
+                  <SelectItem value="PATCH">PATCH</SelectItem>
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="requestUrl"
+          render={({ field }) => (
+            <FormItem className="flex-shrink-0">
+              <FormLabel>Request URL</FormLabel>
+              <FormControl>
+                <Input className="code-input" placeholder="http://localhost:4000/auth/login" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="jsonReqBody"
+          render={({ field }) => (
+            <FormItem className="flex-grow">
+              <FormLabel>Request Body (JSON)</FormLabel>
+              <FormControl className="flex-grow min-h-[0]">
+                <code className="min-h-[0]">
+                  <Textarea className="flex min-h-[0] h-[90%]" placeholder="{}" {...field} />
+                </code>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <Button type="submit">Submit</Button>
+      </form>
+    </Form>
+  )
+}
+
+
+function ShowResponse({ response }: { response: AxiosResponse<any, any> | undefined}) {
+  return (
+    <div className="h-full flex flex-col space-y-8 p-3">
+      <div className="bg-white">
+        <div>
+          Status: {response?.status}
         </div>
       </div>
 
-      <div className="relative flex place-items-center before:absolute before:h-[300px] before:w-full sm:before:w-[480px] before:-translate-x-1/2 before:rounded-full before:bg-gradient-radial before:from-white before:to-transparent before:blur-2xl before:content-[''] after:absolute after:-z-20 after:h-[180px] after:w-full sm:after:w-[240px] after:translate-x-1/3 after:bg-gradient-conic after:from-sky-200 after:via-blue-200 after:blur-2xl after:content-[''] before:dark:bg-gradient-to-br before:dark:from-transparent before:dark:to-blue-700 before:dark:opacity-10 after:dark:from-sky-900 after:dark:via-[#0141ff] after:dark:opacity-40 before:lg:h-[360px] z-[-1]">
-        <Image
-          className="relative dark:drop-shadow-[0_0_0.3rem_#ffffff70] dark:invert"
-          src="/next.svg"
-          alt="Next.js Logo"
-          width={180}
-          height={37}
-          priority
-        />
+      <div className="bg-white overflow-x-auto h-[90%] max-w-full">
+        <code className="whitespace-pre-wrap">
+          {JSON.stringify(response?.data, null, 2)}
+        </code>
       </div>
-
-      <div className="mb-32 grid text-center lg:max-w-5xl lg:w-full lg:mb-0 lg:grid-cols-4 lg:text-left">
-        <a
-          href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Docs{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Find in-depth information about Next.js features and API.
-          </p>
-        </a>
-
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Learn{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Learn about Next.js in an interactive course with&nbsp;quizzes!
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Templates{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Explore starter templates for Next.js.
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Deploy{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50 text-balance`}>
-            Instantly deploy your Next.js site to a shareable URL with Vercel.
-          </p>
-        </a>
-      </div>
-    </main>
+    </div>
   );
 }
