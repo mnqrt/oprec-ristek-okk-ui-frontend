@@ -31,6 +31,7 @@ import { setCookie, getCookie, deleteCookie } from "cookies-next";
 import axios, { Axios, AxiosResponse } from "axios";
 import { useState } from "react";
 
+
 interface ErrorResponse {
   status: string,
   data: string
@@ -191,7 +192,7 @@ function InputURLAndData({ onRequest }: { onRequest: (res: AxiosResponse<any, an
         </form>
       </Form>
       <Button className="w-full" variant={"destructive"} onClick={async () => await axios.delete("http://localhost:4000/auth/delete-all-token")}>
-        Delete All Token (Only click this when authentication failed)
+        Delete All Token (Klik ini jika ingin logout dengan cepat :D)
       </Button>
     </div>
   )
